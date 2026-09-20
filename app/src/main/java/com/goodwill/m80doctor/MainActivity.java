@@ -61,8 +61,8 @@ public class MainActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 String js = "(function(){"+
-                        "var c=document.querySelector('.card.camera');if(c){c.removeAttribute('onclick');c.className='card';c.innerHTML='<div class=\"card-head\"><span>◆ MACHINE HEALTH</span><small>READ ONLY</small></div><div class=\"mini-grid\"><div><small>AXIS SOURCE</small><b>R4500+</b></div><div><small>PLC UNIT</small><b>0.001 mm</b></div><div><small>PROGRAM</small><b id=\"healthProgram\">PROBE</b></div><div><small>STATUS</small><b id=\"healthAxis\">VERIFY XYZ</b></div></div>';}" +
-                        "var sc=document.getElementById('setCamera');if(sc&&sc.parentElement)sc.parentElement.remove();" +
+                        "var c=document.querySelector('.card.camera');if(c){c.removeAttribute('onclick');c.className='card';c.innerHTML='<div class=\"card-head\"><span>◆ MACHINE HEALTH</span><small>READ ONLY</small><span id=\"camState\" style=\"display:none\"></span></div><div class=\"mini-grid\"><div><small>AXIS SOURCE</small><b>R4500+</b></div><div><small>PLC UNIT</small><b>0.001 mm</b></div><div><small>PROGRAM</small><b id=\"healthProgram\">PROBE</b></div><div><small>STATUS</small><b id=\"healthAxis\">VERIFY XYZ</b></div></div>';}" +
+                        "var sc=document.getElementById('setCamera');if(sc&&sc.parentElement)sc.parentElement.style.display='none';" +
                         "var hint=document.querySelector('.position .hint');if(hint)hint.textContent='LIVE MACHINE POSITION • R4500/R4504/R4508 • VERIFY ONCE AGAINST M80 SCREEN';" +
                         "var rb=document.querySelectorAll('.position .rawbox');if(rb.length>1){rb[0].innerHTML='<small>COMMAND SOURCE</small><b>R4500 / 4504 / 4508</b>';rb[1].innerHTML='<small>PLC SCALE</small><b>B = 0.001 mm</b>';}" +
                         "})();";
@@ -97,8 +97,11 @@ public class MainActivity extends Activity {
             try {
                 SlmpClient.Snapshot snap = client().readSnapshot();
                 SlmpClient.JobData job = client().readJobData();
-                SlmpClient.AxisData axis = client().readAxisData();
-                SlmpClient.WindowProbe probe = client().readPlcWindowProbe();
+                SlmpClient.AxisData axis = null;
+                SlmpClient.WindowProbe probe = new SlmpClient.WindowProbe();
+                String axisError = null, windowError = null;
+                try { axis = client().readAxisData(); } catch (Exception ex) { axisError = ex.getMessage(); }
+                try { probe = client().readPlcWindowProbe(); } catch (Exception ex) { windowError = ex.getMessage(); }
                 long now = System.currentTimeMillis();
                 double dt = Math.max(0, Math.min(5, (now - lastTick) / 1000.0));
                 lastTick = now;
@@ -151,11 +154,15 @@ public class MainActivity extends Activity {
                 o.put("curRaw", job.currentPositionRaw);
                 o.put("targetRaw", job.targetWindowRaw);
                 o.put("waitingPocket", job.waitingPocket);
-                o.put("xPos", axis.xMm); o.put("yPos", axis.yMm); o.put("zPos", axis.zMm);
-                o.put("xRawAxis", axis.xRaw); o.put("yRawAxis", axis.yRaw); o.put("zRawAxis", axis.zRaw);
-                o.put("xFb", axis.xFbMm); o.put("yFb", axis.yFbMm); o.put("zFb", axis.zFbMm);
-                o.put("xFbRaw", axis.xFbRaw); o.put("yFbRaw", axis.yFbRaw); o.put("zFbRaw", axis.zFbRaw);
-                o.put("axisScale", "B / 0.001 mm"); o.put("axisMap", "R4500/R4504/R4508");
+                if (axis != null) {
+                    o.put("xPos", axis.xMm); o.put("yPos", axis.yMm); o.put("zPos", axis.zMm);
+                    o.put("xRawAxis", axis.xRaw); o.put("yRawAxis", axis.yRaw); o.put("zRawAxis", axis.zRaw);
+                    o.put("xFb", axis.xFbMm); o.put("yFb", axis.yFbMm); o.put("zFb", axis.zFbMm);
+                    o.put("xFbRaw", axis.xFbRaw); o.put("yFbRaw", axis.yFbRaw); o.put("zFbRaw", axis.zFbRaw);
+                    o.put("axisScale", "B / 0.001 mm"); o.put("axisMap", "R4500/R4504/R4508");
+                }
+                if (axisError != null) o.put("axisError", axisError);
+                if (windowError != null) o.put("windowError", windowError);
                 JSONArray wc = new JSONArray(); for (int v : probe.config) wc.put(v); o.put("plcWindowConfig", wc);
                 JSONArray wins = new JSONArray();
                 for (SlmpClient.WindowEntry w : probe.windows) {
@@ -172,25 +179,36 @@ public class MainActivity extends Activity {
                 for (Integer n : snap.activeFAlarms) alarms.put(n);
                 o.put("fAlarms", alarms);
                 send("window.onMachineData && window.onMachineData(" + JSONObject.quote(o.toString()) + ");");
-                String ax = String.format(Locale.US,
-                        "(function(){var s=function(i,v){var e=document.getElementById(i);if(e)e.textContent=v};"+
-                        "s('xPos','%.3f');s('yPos','%.3f');s('zPos','%.3f');"+
-                        "s('programNo',%s);s('blockNo',%s);s('healthProgram',%s);s('healthAxis','XYZ LIVE');"+
-                        "var t=document.getElementById('diagTable');if(t){t.insertAdjacentHTML('beforeend',"+
-                        "'<tr><th>XYZ command R4500/04/08</th><td>X %.3f • Y %.3f • Z %.3f mm</td></tr>'+"+
-                        "'<tr><th>XYZ feedback R4628/32/36</th><td>X %.3f • Y %.3f • Z %.3f mm</td></tr>'+"+
-                        "'<tr><th>Axis raw signed32</th><td>X %d • Y %d • Z %d</td></tr>'+"+
-                        "'<tr><th>PLC Window R424-R435</th><td>%s</td></tr>'+"+
-                        "'<tr><th>Program execution status</th><td>%s</td></tr>');}})();",
-                        axis.xMm,axis.yMm,axis.zMm,
-                        probe.mainO!=null?JSONObject.quote("O"+probe.mainO):JSONObject.quote("—"),
-                        probe.mainN!=null?JSONObject.quote("N"+probe.mainN):JSONObject.quote("—"),
-                        probe.mainO!=null?JSONObject.quote("O"+probe.mainO):JSONObject.quote("PROBE"),
-                        axis.xMm,axis.yMm,axis.zMm,axis.xFbMm,axis.yFbMm,axis.zFbMm,
-                        axis.xRaw,axis.yRaw,axis.zRaw,
-                        JSONObject.quote(windowConfigText(probe.config)),
-                        JSONObject.quote(probe.mainO!=null?("Section 45 LIVE: O"+probe.mainO+" N"+probe.mainN+" B"+probe.mainB):"No existing Section 45 window detected"));
-                send(ax);
+                final SlmpClient.AxisData axisFinal = axis;
+                final SlmpClient.WindowProbe probeFinal = probe;
+                final String axisErrFinal = axisError, windowErrFinal = windowError;
+                StringBuilder js = new StringBuilder("(function(){var s=function(i,v){var e=document.getElementById(i);if(e)e.textContent=v};");
+                if (axisFinal != null) {
+                    js.append(String.format(Locale.US,
+                            "s('xPos','%.3f');s('yPos','%.3f');s('zPos','%.3f');s('healthAxis','XYZ LIVE');",
+                            axisFinal.xMm, axisFinal.yMm, axisFinal.zMm));
+                } else {
+                    js.append("s('healthAxis','XYZ PROBE ERROR');");
+                }
+                js.append("s('programNo',").append(JSONObject.quote(probeFinal.mainO!=null?("O"+probeFinal.mainO):"—")).append(");");
+                js.append("s('blockNo',").append(JSONObject.quote(probeFinal.mainN!=null?("N"+probeFinal.mainN):"—")).append(");");
+                js.append("s('healthProgram',").append(JSONObject.quote(probeFinal.mainO!=null?("O"+probeFinal.mainO):"PROBE")).append(");");
+                js.append("var t=document.getElementById('diagTable');if(t){");
+                if (axisFinal != null) {
+                    String rows = String.format(Locale.US,
+                            "<tr><th>XYZ command R4500/04/08</th><td>X %.3f • Y %.3f • Z %.3f mm</td></tr>"+
+                            "<tr><th>XYZ feedback R4628/32/36</th><td>X %.3f • Y %.3f • Z %.3f mm</td></tr>"+
+                            "<tr><th>Axis raw signed32</th><td>X %d • Y %d • Z %d</td></tr>",
+                            axisFinal.xMm,axisFinal.yMm,axisFinal.zMm,axisFinal.xFbMm,axisFinal.yFbMm,axisFinal.zFbMm,axisFinal.xRaw,axisFinal.yRaw,axisFinal.zRaw);
+                    js.append("t.insertAdjacentHTML('beforeend',").append(JSONObject.quote(rows)).append(");");
+                } else {
+                    js.append("t.insertAdjacentHTML('beforeend',").append(JSONObject.quote("<tr><th>XYZ probe</th><td>"+(axisErrFinal==null?"Unavailable":axisErrFinal)+"</td></tr>")).append(");");
+                }
+                String prow = "<tr><th>PLC Window R424-R435</th><td>"+windowConfigText(probeFinal.config)+"</td></tr>" +
+                        "<tr><th>Program execution status</th><td>"+(probeFinal.mainO!=null?("Section 45 LIVE: O"+probeFinal.mainO+" N"+probeFinal.mainN+" B"+probeFinal.mainB):(windowErrFinal==null?"No existing Section 45 read window detected":"Probe error: "+windowErrFinal))+"</td></tr>";
+                js.append("t.insertAdjacentHTML('beforeend',").append(JSONObject.quote(prow)).append(");}");
+                js.append("})();");
+                send(js.toString());
             } catch (Exception e) {
                 JSONObject o = new JSONObject();
                 try {
