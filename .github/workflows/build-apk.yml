@@ -17,8 +17,19 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+
+      - name: Reconstruct Java sources
+        shell: bash
+        run: |
+          mkdir -p app/src/main/java/com/goodwill/m80doctor
+          cat source-parts/MainActivity.java.part* > app/src/main/java/com/goodwill/m80doctor/MainActivity.java
+          cat source-parts/SlmpClient.java.part* > app/src/main/java/com/goodwill/m80doctor/SlmpClient.java
+          echo "MainActivity bytes: $(wc -c < app/src/main/java/com/goodwill/m80doctor/MainActivity.java)"
+          echo "SlmpClient bytes: $(wc -c < app/src/main/java/com/goodwill/m80doctor/SlmpClient.java)"
+
       - name: Build debug APK
-        run: gradle :app:assembleDebug
+        run: gradle :app:assembleDebug --stacktrace
+
       - uses: actions/upload-artifact@v4
         with:
           name: GOODWILL-M80-Machine-Doctor-APK
