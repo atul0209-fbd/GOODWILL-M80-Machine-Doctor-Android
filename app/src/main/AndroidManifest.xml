@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <application
         android:allowBackup="true"
+        android:hardwareAccelerated="true"
         android:icon="@drawable/machine_doctor_icon"
         android:label="GOODWILL Machine Doctor"
         android:theme="@style/AppTheme"
