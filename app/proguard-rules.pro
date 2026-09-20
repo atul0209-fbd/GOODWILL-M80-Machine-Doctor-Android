@@ -1,1 +1,3 @@
-# No special ProGuard rules required.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
