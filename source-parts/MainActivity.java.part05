@@ -1,0 +1,89 @@
+Text(String.valueOf(j.spindleSpeed));
+            feedOvr.setText(String.valueOf(j.feedOverride));
+            rapidOvr.setText(String.valueOf(j.rapidOverride));
+            spindleOvr.setText(String.valueOf(j.spindleOverride));
+            xLoad.setText(String.valueOf(j.xLoad));
+            zLoad.setText(String.valueOf(j.zLoad));
+            rawCurrent.setText(String.valueOf(j.currentPositionRaw));
+            rawTarget.setText(String.valueOf(j.targetWindowRaw));
+        }
+    }
+
+    private SlmpClient client() { return new SlmpClient(host(), port()); }
+    private String host() { return prefs.getString("host","192.168.250.1"); }
+    private int port() { return prefs.getInt("port",30000); }
+
+    // ---------- UI helpers ----------
+    private LinearLayout row() { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); return l; }
+    private LinearLayout col() { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); return l; }
+    private TextView txt(String s, int sp, int color, boolean bold) {
+        TextView t = new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(color);
+        if (bold) t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        return t;
+    }
+    private Button navButton(String s) {
+        Button b = new Button(this); b.setText(s); b.setTextColor(Color.WHITE); b.setTextSize(12);
+        b.setBackgroundColor(NAVY); b.setAllCaps(false); return b;
+    }
+    private Button smallButton(String s) {
+        Button b = new Button(this); b.setText(s); b.setTextSize(11); b.setAllCaps(false);
+        b.setTextColor(INK); b.setBackgroundColor(Color.rgb(233,242,255)); return b;
+    }
+    private LinearLayout panel(String title) {
+        LinearLayout p = col(); p.setPadding(dp(8),dp(7),dp(8),dp(7)); p.setBackgroundColor(PANEL);
+        TextView h = txt(title, 15, INK, true); h.setPadding(0,0,0,dp(7)); p.addView(h);
+        return p;
+    }
+    private TextView statusCell(LinearLayout parent, String text, float weight) {
+        TextView t = txt(text, 12, Color.WHITE, true); t.setGravity(Gravity.CENTER);
+        parent.addView(t, new LinearLayout.LayoutParams(0,-1,weight)); return t;
+    }
+    private TextView coordRow(LinearLayout p, String axis) {
+        LinearLayout r = row(); TextView a = txt(axis, 28, Color.rgb(56,145,235), true);
+        TextView v = txt("—", 32, Color.WHITE, true); v.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        r.setBackgroundColor(Color.rgb(13,27,42));
+        r.addView(a,new LinearLayout.LayoutParams(dp(45),dp(62)));
+        r.addView(v,new LinearLayout.LayoutParams(0,dp(62),1f));
+        p.addView(r); return v;
+    }
+    private TextView metric(LinearLayout p, String label, String value) {
+        LinearLayout r = row(); r.setPadding(dp(6),dp(4),dp(6),dp(4));
+        TextView l = txt(label, 11, MUTED, true);
+        TextView v = txt(value, 18, INK, true); v.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        r.addView(l,new LinearLayout.LayoutParams(0,dp(42),1f)); r.addView(v,new LinearLayout.LayoutParams(dp(105),dp(42)));
+        p.addView(r); return v;
+    }
+    private TextView metricCell(LinearLayout parent, String label, String value) {
+        LinearLayout c = col(); c.setPadding(dp(6),dp(4),dp(6),dp(4));
+        c.addView(txt(label,9,MUTED,true)); TextView v=txt(value,16,INK,true); c.addView(v);
+        parent.addView(c,new LinearLayout.LayoutParams(0,dp(54),1f)); return v;
+    }
+    private TextView note(String s) {
+        TextView t=txt(s,11,MUTED,false);t.setPadding(dp(7),dp(7),dp(7),dp(7));return t;
+    }
+    private LinearLayout bottomPanel(LinearLayout parent, String title) {
+        LinearLayout p=panel(title); parent.addView(p,new LinearLayout.LayoutParams(0,-1,1f)); return p;
+    }
+    private TextView bottomCard(LinearLayout parent, String title, String value) {
+        LinearLayout p=panel(title); TextView t=txt(value,15,GREEN,true);t.setGravity(Gravity.CENTER);
+        p.addView(t,new LinearLayout.LayoutParams(-1,0,1f));parent.addView(p,new LinearLayout.LayoutParams(0,-1,1f));return t;
+    }
+    private EditText field(LinearLayout p,String label,String value){
+        p.addView(txt(label,12,MUTED,true));EditText e=new EditText(this);e.setText(value);e.setSingleLine(true);p.addView(e);return e;
+    }
+    private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
+    private static String hhmm(double sec){int s=(int)sec;return String.format(Locale.US,"%02d:%02d",s/3600,(s%3600)/60);}
+    private static String hhmmss(long sec){return String.format(Locale.US,"%02d:%02d",sec/60,sec%60);}
+
+    private void addJobRows(LinearLayout p, SlmpClient.JobData j) {
+        metric(p,"Spindle Tool • R10620",String.valueOf(j.spindleTool));
+        metric(p,"T Command • R536",String.valueOf(j.tCode));
+        metric(p,"S Command • R512",String.valueOf(j.sCode));
+        metric(p,"M Code • R504",String.valueOf(j.mCode));
+        metric(p,"Spindle Speed RAW • R6500",String.valueOf(j.spindleSpeed));
+        metric(p,"Feed Override RAW • R2500",String.valueOf(j.feedOverride));
+        metric(p,"Rapid Override RAW • R2502",String.valueOf(j.rapidOverride));
+        metric(p,"Spindle Override RAW • R7008",String.valueOf(j.spindleOverride));
+        metric(p,"X Load RAW • R4884",String.valueOf(j.xLoad));
+        metric(p,"Z Load RAW • R4888",String.valueOf(j.zLoad));
+        metric(p,"Tool Change Status • R6437",String.valueOf(j.toolChangeSta
