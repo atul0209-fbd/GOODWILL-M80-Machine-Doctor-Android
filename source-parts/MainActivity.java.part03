@@ -1,0 +1,115 @@
+removeAllViews();
+        LinearLayout p = panel("LUBRICATION");
+        if (lastSnapshot != null) {
+            metric(p, "Oil Level RAW (XB)", String.valueOf(lastSnapshot.lubeLevelRaw));
+            metric(p, "Oil Pressure RAW (XC)", String.valueOf(lastSnapshot.lubePressureRaw));
+            metric(p, "M707 Lube Pulse", String.valueOf(lastSnapshot.lubePulse));
+            metric(p, "M708 Lube Command", String.valueOf(lastSnapshot.lubeCommand));
+            metric(p, "Y227 Lube Motor", String.valueOf(lastSnapshot.lubeMotorY227));
+            metric(p, "Y305 Lube Motor", String.valueOf(lastSnapshot.lubeMotorY305));
+            metric(p, "TN0 ON Timer", String.valueOf(lastSnapshot.tn0));
+            metric(p, "TN1 Interval Timer", String.valueOf(lastSnapshot.tn1));
+        } else p.addView(note("Waiting for live data..."));
+        p.addView(note("XB/XC remain RAW until polarity is validated. CNC remains read-only."));
+        content.removeAllViews(); content.addView(p);
+    }
+
+    private void showRuntime() {
+        content.removeAllViews();
+        LinearLayout p = panel("CYCLE & RUNTIME");
+        metric(p, "Completed cycles (M30 rising edge)", String.valueOf(cycleCount));
+        metric(p, "Running", hhmm(runSec));
+        metric(p, "Idle", hhmm(idleSec));
+        metric(p, "Alarm", hhmm(alarmSec));
+        p.addView(note("Initial basis: XC13 = running, XC43 = completed cycle. Verify once during real production."));
+        content.addView(p);
+    }
+
+    private void showPlc() {
+        content.removeAllViews();
+        LinearLayout p = panel("PLC LIVE READ");
+        EditText dev = new EditText(this);
+        dev.setHint("e.g. M708, X241, R6500");
+        dev.setSingleLine(true);
+        p.addView(dev);
+        TextView result = txt("Enter a device and tap Live Read.", 16, INK, false);
+        Button b = smallButton("LIVE READ");
+        b.setOnClickListener(v -> {
+            String s = dev.getText().toString().trim().toUpperCase(Locale.ROOT);
+            if (s.isEmpty()) return;
+            io.submit(() -> {
+                try {
+                    ParsedDevice pd = parseDevice(s);
+                    int val = client().readSingle(pd.family, pd.address);
+                    runOnUiThread(() -> result.setText(s + " = " + val));
+                } catch (Exception e) {
+                    runOnUiThread(() -> result.setText("Error: " + e.getMessage()));
+                }
+            });
+        });
+        p.addView(b); p.addView(result);
+        p.addView(note("This page only issues SLMP READ command 0401."));
+        content.addView(p);
+    }
+
+    private void showDiag() {
+        content.removeAllViews();
+        LinearLayout p = panel("DIAGNOSTICS");
+        metric(p, "M80 target", host() + ":" + port());
+        metric(p, "SSID", prefs.getString("ssid","GOODWILL"));
+        metric(p, "CNC mode", "READ ONLY");
+        Button t = smallButton("TEST CONNECTION");
+        TextView result = note("Not tested");
+        t.setOnClickListener(v -> io.submit(() -> {
+            boolean ok = client().testConnection();
+            runOnUiThread(() -> result.setText(ok ? "PASS" : "FAIL"));
+        }));
+        p.addView(t); p.addView(result);
+        p.addView(note("No write/force/reset/cycle-start command exists in this app."));
+        content.addView(p);
+    }
+
+    private void showHelp() {
+        content.removeAllViews();
+        LinearLayout p = panel("MANUAL & HELP");
+        p.addView(note("Machine-builder/Mitsubishi PDF manual library is not embedded yet."));
+        p.addView(note("Current app already provides read-only live machine status, job R-registers, lubrication and diagnostics."));
+        p.addView(note("Next step after APK installation: verify true XYZ and current program/block mapping on the actual M80."));
+        content.addView(p);
+    }
+
+    private void unlockSettings() {
+        final EditText pwd = new EditText(this);
+        pwd.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        pwd.setHint("Password");
+        new AlertDialog.Builder(this)
+                .setTitle("Settings Locked")
+                .setView(pwd)
+                .setPositiveButton("Unlock", (d,w) -> {
+                    if ("0209".equals(pwd.getText().toString())) showSettings();
+                    else Toast.makeText(this,"Wrong password",Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showSettings() {
+        content.removeAllViews();
+        ScrollView sv = new ScrollView(this);
+        LinearLayout p = panel("SETTINGS • PASSWORD PROTECTED");
+        EditText name = field(p, "Machine Name", prefs.getString("name","VMC-01"));
+        EditText ssid = field(p, "Machine Wi-Fi SSID", prefs.getString("ssid","GOODWILL"));
+        EditText host = field(p, "M80 IP", host());
+        EditText port = field(p, "SLMP Port", String.valueOf(port()));
+        EditText cam = field(p, "Camera URL", prefs.getString("camera_url",""));
+
+        Button wifi = smallButton("OPEN ANDROID WI-FI SETTINGS");
+        wifi.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS)));
+        p.addView(wifi);
+
+        Button save = smallButton("SAVE APP SETTINGS");
+        save.setOnClickListener(v -> {
+            int prt = 30000;
+            try { prt = Integer.parseInt(port.getText().toString().trim()); } catch (Exception ignored) {}
+            prefs.edit()
+          
