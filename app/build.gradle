@@ -1,26 +1,19 @@
-plugins {
-    id 'com.android.application'
-}
-
+plugins { id 'com.android.application' }
 android {
     namespace 'com.goodwill.m80doctor'
     compileSdk 34
-
     defaultConfig {
         applicationId 'com.goodwill.m80doctor'
         minSdk 23
         targetSdk 34
-        versionCode 2
-        versionName '2.0-native'
+        versionCode 3
+        versionName '3.0-professional'
     }
-
     buildTypes {
-        debug {
-            debuggable true
-        }
+        debug { debuggable true }
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),'proguard-rules.pro'
         }
     }
 }
