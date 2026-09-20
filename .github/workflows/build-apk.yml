@@ -1,4 +1,4 @@
-name: Build GOODWILL M80 APK
+name: Build GOODWILL Machine Doctor v3
 
 on:
   workflow_dispatch:
@@ -18,19 +18,20 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Reconstruct Java sources
+      - name: Reconstruct approved professional UI and logo
         shell: bash
         run: |
-          mkdir -p app/src/main/java/com/goodwill/m80doctor
-          cat source-parts/MainActivity.java.part* > app/src/main/java/com/goodwill/m80doctor/MainActivity.java
-          cat source-parts/SlmpClient.java.part* > app/src/main/java/com/goodwill/m80doctor/SlmpClient.java
-          echo "MainActivity bytes: $(wc -c < app/src/main/java/com/goodwill/m80doctor/MainActivity.java)"
-          echo "SlmpClient bytes: $(wc -c < app/src/main/java/com/goodwill/m80doctor/SlmpClient.java)"
+          mkdir -p app/src/main/assets app/src/main/res/drawable
+          cat packed/ui.part* > /tmp/ui.b64
+          base64 -d /tmp/ui.b64 | gunzip > app/src/main/assets/index.html
+          cat packed/icon.part* > /tmp/icon.b64
+          base64 -d /tmp/icon.b64 > app/src/main/res/drawable/machine_doctor_icon.webp
+          cp app/src/main/res/drawable/machine_doctor_icon.webp app/src/main/assets/machine_doctor_icon.png
 
-      - name: Build debug APK
+      - name: Build APK
         run: gradle :app:assembleDebug --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
-          name: GOODWILL-M80-Machine-Doctor-APK
+          name: GOODWILL-Machine-Doctor-v3-APK
           path: app/build/outputs/apk/debug/app-debug.apk
