@@ -1,0 +1,75 @@
+08 - 592];
+
+            x.lubeLevelRaw = xl[hex("B")];
+            x.lubePressureRaw = xl[hex("C")];
+            x.lubeFloat = xl[hex("240")];
+            x.lubePressureSwitch = xl[hex("241")];
+            x.lubeMotorOverload = xl[hex("249")];
+
+            x.lubeMotorY227 = y[hex("227") - hex("200")];
+            x.lubeMotorY305 = y[hex("305") - hex("200")];
+
+            x.tn0 = tn[0];
+            x.tn1 = tn[1];
+
+            List<Integer> active = new ArrayList<>();
+            for (int i = 0; i < 2048; i++) if (f[i] == 1) active.add(i);
+            x.activeFAlarms = active;
+
+            x.latencyMs = (System.nanoTime() - t0) / 1_000_000.0;
+            return x;
+        }
+    }
+
+    public JobData readJobData() throws Exception {
+        JobData d = new JobData();
+        d.mCode = readSingle("R", 504);
+        d.sCode = readSingle("R", 512);
+        d.tCode = readSingle("R", 536);
+        d.feedOverride = readSingle("R", 2500);
+        d.rapidOverride = readSingle("R", 2502);
+        d.xLoad = readSingle("R", 4884);
+        d.zLoad = readSingle("R", 4888);
+        d.toolChangeStatus = readSingle("R", 6437);
+        d.spindleSpeed = readSingle("R", 6500);
+        d.spindleOverride = readSingle("R", 7008);
+        d.targetPositionRaw = readSingle("R", 8312);
+        d.currentPositionRaw = readSingle("R", 8701);
+        d.targetWindowRaw = readSingle("R", 8702);
+        d.waitingPocket = readSingle("R", 9100);
+        d.spindleTool = readSingle("R", 10620);
+        return d;
+    }
+
+    public boolean testConnection() {
+        try (Socket ignored = open()) {
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private Socket open() throws Exception {
+        Socket s = new Socket();
+        s.connect(new InetSocketAddress(host, port), 2500);
+        s.setSoTimeout(3000);
+        return s;
+    }
+
+    private static int hex(String s) { return Integer.parseInt(s, 16); }
+
+    public static final class Snapshot {
+        public int controllerReady, servoReady, autoMode, cycle, feedHold, ncAlarm, servoAlarm,
+                programError, operationError, m30, plcAlarm;
+        public int lubeLevelRaw, lubePressureRaw, lubeFloat, lubePressureSwitch, lubeMotorOverload,
+                lubePulse, lubeCommand, lubeMotorY227, lubeMotorY305, tn0, tn1;
+        public double latencyMs;
+        public List<Integer> activeFAlarms = new ArrayList<>();
+    }
+
+    public static final class JobData {
+        public int mCode, sCode, tCode, feedOverride, rapidOverride, xLoad, zLoad,
+                toolChangeStatus, spindleSpeed, spindleOverride, targetPositionRaw,
+                currentPositionRaw, targetWindowRaw, waitingPocket, spindleTool;
+    }
+}
