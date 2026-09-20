@@ -1,0 +1,18 @@
+tus));
+        metric(p,"Current Position Window • R8701",String.valueOf(j.currentPositionRaw));
+        metric(p,"Target Position Window • R8702",String.valueOf(j.targetWindowRaw));
+        metric(p,"Waiting Pocket • R9100",String.valueOf(j.waitingPocket));
+    }
+
+    private ParsedDevice parseDevice(String d) throws Exception {
+        String family;
+        if (d.startsWith("TN")) family="TN";
+        else if (d.startsWith("SM")) family="SM";
+        else family=d.substring(0,1);
+        String number=d.substring(family.length());
+        int address=(family.equals("X")||family.equals("Y")||family.equals("B"))?
+                Integer.parseInt(number,16):Integer.parseInt(number);
+        return new ParsedDevice(family,address);
+    }
+    private static final class ParsedDevice { final String family; final int address; ParsedDevice(String f,int a){family=f;address=a;} }
+}
