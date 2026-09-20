@@ -3,11 +3,11 @@ android {
     namespace 'com.goodwill.m80doctor'
     compileSdk 34
     defaultConfig {
-        applicationId 'com.goodwill.m80doctor'
+        applicationId 'com.goodwill.machinedoctor'
         minSdk 23
         targetSdk 34
-        versionCode 4
-        versionName '4.0-approved-responsive'
+        versionCode 40
+        versionName '4.0.1-approved-clean-install'
     }
     buildTypes {
         debug { debuggable true }
