@@ -1,0 +1,123 @@
+           .putString("name", name.getText().toString().trim())
+                    .putString("ssid", ssid.getText().toString().trim())
+                    .putString("host", host.getText().toString().trim())
+                    .putInt("port", prt)
+                    .putString("camera_url", cam.getText().toString().trim())
+                    .apply();
+            Toast.makeText(this,"Saved. CNC parameters were not changed.",Toast.LENGTH_LONG).show();
+            showPanel();
+        });
+        p.addView(save);
+        p.addView(note("These settings configure the Android monitor only. They do not write to CNC parameters."));
+        sv.addView(p); content.addView(sv);
+    }
+
+    private void openCamera() {
+        String url = prefs.getString("camera_url","");
+        if (url.isEmpty()) {
+            Toast.makeText(this,"Camera URL not configured",Toast.LENGTH_LONG).show();
+            return;
+        }
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+        catch (Exception e) { Toast.makeText(this,"Cannot open camera URL",Toast.LENGTH_LONG).show(); }
+    }
+
+    private void startPolling() {
+        io.submit(() -> {
+            while (running) {
+                try {
+                    SlmpClient.Snapshot s = client().readSnapshot();
+                    SlmpClient.JobData j = client().readJobData();
+                    long now = System.currentTimeMillis();
+                    double dt = Math.max(0, Math.min(5, (now-lastTick)/1000.0));
+                    lastTick = now;
+
+                    boolean anyAlarm = !s.activeFAlarms.isEmpty() || s.ncAlarm != 0 || s.servoAlarm != 0 ||
+                            s.programError != 0 || s.operationError != 0 || s.plcAlarm != 0;
+                    if (s.cycle != 0) runSec += dt;
+                    else if (s.controllerReady != 0 && !anyAlarm) idleSec += dt;
+                    if (anyAlarm) alarmSec += dt;
+
+                    if (s.cycle == 1 && prevCycle == 0) cycleStartMs = now;
+                    if (s.cycle == 0 && prevCycle == 1) cycleStartMs = 0;
+                    prevCycle = s.cycle;
+
+                    if (s.m30 == 1 && prevM30 == 0) {
+                        cycleCount++;
+                    }
+                    prevM30 = s.m30;
+
+                    lastSnapshot = s;
+                    lastJob = j;
+                    runOnUiThread(this::applyLiveToCurrentPage);
+                } catch (Exception e) {
+                    runOnUiThread(() -> {
+                        topStatus.setText("OFFLINE • " + e.getMessage());
+                        topStatus.setTextColor(RED);
+                    });
+                }
+                try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+            }
+        });
+    }
+
+    private void applyLiveToCurrentPage() {
+        topClock.setText(new SimpleDateFormat("HH:mm:ss", Locale.US).format(new Date()));
+        if (lastSnapshot != null) {
+            topStatus.setText(prefs.getString("name","VMC-01") + " • ONLINE • READ ONLY");
+            topStatus.setTextColor(GREEN);
+        }
+        if ("PANEL".equals(currentPage)) applyLiveToPanel();
+        else if ("JOB".equals(currentPage)) showJob();
+        else if ("LUBE".equals(currentPage)) showLube();
+        else if ("RUNTIME".equals(currentPage)) showRuntime();
+    }
+
+    private void applyLiveToPanel() {
+        SlmpClient.Snapshot s = lastSnapshot;
+        SlmpClient.JobData j = lastJob;
+        if (s == null || state == null) return;
+
+        boolean anyAlarm = !s.activeFAlarms.isEmpty() || s.ncAlarm != 0 || s.servoAlarm != 0 ||
+                s.programError != 0 || s.operationError != 0 || s.plcAlarm != 0;
+        String st = anyAlarm ? "ALARM" : (s.cycle != 0 ? "RUNNING" : (s.controllerReady != 0 ? "READY / IDLE" : "NOT READY"));
+        state.setText(st);
+        state.setTextColor(anyAlarm ? RED : GREEN);
+        ready.setText("READY " + s.controllerReady);
+        servo.setText("SERVO " + s.servoReady);
+        autoMode.setText("AUTO " + s.autoMode);
+        cycle.setText("CYCLE " + s.cycle);
+        hold.setText("HOLD " + s.feedHold);
+        alarm.setText("ALARM " + (anyAlarm ? 1 : 0));
+        mode.setText(s.autoMode != 0 ? "AUTO" : "READY");
+
+        long cycleSec = (cycleStartMs > 0 && s.cycle != 0) ? (System.currentTimeMillis()-cycleStartMs)/1000 : 0;
+        cycleClock.setText(hhmmss(cycleSec));
+        cycles.setText(String.valueOf(cycleCount));
+
+        coordX.setText("—"); coordY.setText("—"); coordZ.setText("—");
+
+        lubeLevel.setText(String.valueOf(s.lubeLevelRaw));
+        lubePress.setText(String.valueOf(s.lubePressureRaw));
+        lubeCmd.setText(String.valueOf(s.lubeCommand));
+        lubeTn1.setText(String.valueOf(s.tn1));
+
+        todayRun.setText(hhmm(runSec));
+        todayIdle.setText(hhmm(idleSec));
+        todayAlarm.setText(hhmm(alarmSec));
+        todayCycles.setText(String.valueOf(cycleCount));
+
+        if (anyAlarm) {
+            alarmBox.setText(!s.activeFAlarms.isEmpty() ? ("F" + s.activeFAlarms.get(0) + " ACTIVE") : "NC / SERVO / PLC ALARM");
+            alarmBox.setTextColor(RED);
+        } else {
+            alarmBox.setText("NO ACTIVE ALARM");
+            alarmBox.setTextColor(GREEN);
+        }
+
+        if (j != null) {
+            tool.setText(String.valueOf(j.spindleTool));
+            tCode.setText(String.valueOf(j.tCode));
+            sCode.setText(String.valueOf(j.sCode));
+            mCode.setText(String.valueOf(j.mCode));
+            spindle.set
