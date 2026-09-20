@@ -1,0 +1,16 @@
+{
+  "project": "GOODWILL M80 Machine Doctor Android",
+  "generation": "fresh native project",
+  "applicationId": "com.goodwill.m80doctor",
+  "version": "2.0-native",
+  "minSdk": 23,
+  "targetSdk": 34,
+  "settingsPassword": "0209",
+  "controller": "MITSUBISHI CNC 80VM-B",
+  "host": "192.168.250.1",
+  "port": 30000,
+  "mode": "READ ONLY / SLMP 0401 only",
+  "webview": false,
+  "thirdPartyDependencies": false,
+  "apkBuildWorkflow": true
+}
