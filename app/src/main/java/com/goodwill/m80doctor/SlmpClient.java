@@ -71,8 +71,67 @@ public final class SlmpClient {
         d.toolChangeStatus=readSingle("R",6437); d.spindleSpeed=readSingle("R",6500); d.spindleOverride=readSingle("R",7008);
         d.currentPositionRaw=readSingle("R",8701); d.targetWindowRaw=readSingle("R",8702); d.waitingPocket=readSingle("R",9100); d.spindleTool=readSingle("R",10620); return d;
     }
+
+    private static long s32(int lo,int hi){return (long)(int)(((hi&0xFFFF)<<16)|(lo&0xFFFF));}
+
+    public AxisData readAxisData()throws Exception{
+        try(Socket s=open()){
+            int[] cmd=readWords(s,"R",4500,10);
+            int[] fb=readWords(s,"R",4628,10);
+            AxisData a=new AxisData();
+            a.xRaw=s32(cmd[0],cmd[1]); a.yRaw=s32(cmd[4],cmd[5]); a.zRaw=s32(cmd[8],cmd[9]);
+            a.xFbRaw=s32(fb[0],fb[1]); a.yFbRaw=s32(fb[4],fb[5]); a.zFbRaw=s32(fb[8],fb[9]);
+            a.xMm=a.xRaw*0.001; a.yMm=a.yRaw*0.001; a.zMm=a.zRaw*0.001;
+            a.xFbMm=a.xFbRaw*0.001; a.yFbMm=a.yFbRaw*0.001; a.zFbMm=a.zFbRaw*0.001;
+            return a;
+        }
+    }
+
+    public WindowProbe readPlcWindowProbe()throws Exception{
+        WindowProbe p=new WindowProbe();
+        try(Socket s=open()){
+            p.config=readWords(s,"R",424,12);
+            int total=0;
+            for(int g=0;g<3 && total<6;g++){
+                int start=p.config[g*4], nraw=p.config[g*4+1];
+                int count=nraw>=1001?nraw-1000:nraw;
+                int stride=nraw>=1001?18:16;
+                if(start<8300 || count<=0) continue;
+                int limit=Math.min(count,6-total);
+                for(int i=0;i<limit;i++){
+                    try{
+                        int[] w=readWords(s,"R",start+i*stride,stride);
+                        WindowEntry e=new WindowEntry();
+                        e.address=start+i*stride; e.extended=stride==18; e.control=w[0]; e.section=w[1]; e.subId=w[2];
+                        if(e.extended){
+                            e.subSection=((w[4]&0xFFFF)<<16)|(w[3]&0xFFFF);
+                            e.dataNo=((w[6]&0xFFFF)<<16)|(w[5]&0xFFFF);
+                            e.method=w[7]; e.number=w[8]; e.result=w[9];
+                            for(int k=0;k<4;k++) e.data[k]=s32(w[10+k*2],w[11+k*2]);
+                        }else{
+                            e.subSection=w[3]; e.dataNo=w[4]; e.method=w[5]; e.number=w[6]; e.result=w[7];
+                            for(int k=0;k<4;k++) e.data[k]=s32(w[8+k*2],w[9+k*2]);
+                        }
+                        p.windows.add(e); total++;
+                        if(e.section==45 && (e.result&0xFF)==1 && e.method==0){
+                            for(int k=0;k<Math.min(4,e.number);k++){
+                                int dn=e.dataNo+k; long val=e.data[k];
+                                if(dn==101)p.mainO=val; if(dn==102)p.mainN=val; if(dn==103)p.mainB=val;
+                                if(dn==201)p.subO=val; if(dn==202)p.subN=val; if(dn==203)p.subB=val;
+                            }
+                        }
+                    }catch(Exception ignored){}
+                }
+            }
+        }
+        return p;
+    }
+
     private Socket open()throws Exception{Socket s=new Socket();s.connect(new InetSocketAddress(host,port),2500);s.setSoTimeout(3000);return s;}
     private static int hex(String s){return Integer.parseInt(s,16);}
     public static final class Snapshot{public int controllerReady,servoReady,autoMode,cycle,feedHold,ncAlarm,servoAlarm,programError,operationError,m30,plcAlarm;public int lubeLevelRaw,lubePressureRaw,lubeFloat,lubePressureSwitch,lubeMotorOverload,lubePulse,lubeCommand,lubeMotorY227,lubeMotorY305,tn0,tn1;public double latencyMs;public List<Integer> activeFAlarms=new ArrayList<>();}
     public static final class JobData{public int mCode,sCode,tCode,feedOverride,rapidOverride,xLoad,zLoad,toolChangeStatus,spindleSpeed,spindleOverride,currentPositionRaw,targetWindowRaw,waitingPocket,spindleTool;}
+    public static final class AxisData{public long xRaw,yRaw,zRaw,xFbRaw,yFbRaw,zFbRaw;public double xMm,yMm,zMm,xFbMm,yFbMm,zFbMm;}
+    public static final class WindowEntry{public int address,control,section,subId,subSection,dataNo,method,number,result;public boolean extended;public long[] data=new long[4];}
+    public static final class WindowProbe{public int[] config=new int[12];public java.util.List<WindowEntry>windows=new java.util.ArrayList<>();public Long mainO,mainN,mainB,subO,subN,subB;}
 }
