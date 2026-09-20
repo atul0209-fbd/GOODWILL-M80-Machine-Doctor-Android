@@ -1,0 +1,143 @@
+package com.goodwill.m80doctor;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+public final class SlmpClient {
+    private final String host;
+    private final int port;
+
+    public SlmpClient(String host, int port) {
+        this.host = host;
+        this.port = port;
+    }
+
+    private static int deviceCode(String f) {
+        switch (f) {
+            case "SM": return 0x91;
+            case "X": return 0x9C;
+            case "Y": return 0x9D;
+            case "M": return 0x90;
+            case "L": return 0x92;
+            case "F": return 0x93;
+            case "B": return 0xA0;
+            case "R": return 0xAF;
+            case "TN": return 0xC2;
+            default: throw new IllegalArgumentException("Unsupported family " + f);
+        }
+    }
+
+    private static void le16(ByteArrayOutputStream o, int v) {
+        o.write(v & 0xFF);
+        o.write((v >>> 8) & 0xFF);
+    }
+
+    private static void le24(ByteArrayOutputStream o, int v) {
+        o.write(v & 0xFF);
+        o.write((v >>> 8) & 0xFF);
+        o.write((v >>> 16) & 0xFF);
+    }
+
+    private static byte[] readExact(InputStream in, int count) throws Exception {
+        byte[] buf = new byte[count];
+        int off = 0;
+        while (off < count) {
+            int n = in.read(buf, off, count - off);
+            if (n <= 0) throw new Exception("Connection closed during SLMP response");
+            off += n;
+        }
+        return buf;
+    }
+
+    private byte[] readFrame(Socket sock, String family, int headAddress, int points, boolean bitAccess) throws Exception {
+        ByteArrayOutputStream req = new ByteArrayOutputStream();
+        le16(req, 0x0010);     // monitoring timer
+        le16(req, 0x0401);     // READ ONLY
+        le16(req, bitAccess ? 0x0001 : 0x0000);
+        le24(req, headAddress);
+        req.write(deviceCode(family));
+        le16(req, points);
+
+        ByteArrayOutputStream frame = new ByteArrayOutputStream();
+        frame.write(new byte[]{0x50,0x00,0x00,(byte)0xFF,(byte)0xFF,0x03,0x00});
+        le16(frame, req.size());
+        frame.write(req.toByteArray());
+
+        OutputStream out = sock.getOutputStream();
+        out.write(frame.toByteArray());
+        out.flush();
+
+        InputStream in = sock.getInputStream();
+        byte[] hdr = readExact(in, 9);
+        if ((hdr[0] & 0xFF) != 0xD0 || (hdr[1] & 0xFF) != 0x00) {
+            throw new Exception("Unexpected SLMP response header");
+        }
+        int len = (hdr[7] & 0xFF) | ((hdr[8] & 0xFF) << 8);
+        byte[] body = readExact(in, len);
+        if (body.length < 2) throw new Exception("SLMP response too short");
+        int end = (body[0] & 0xFF) | ((body[1] & 0xFF) << 8);
+        if (end != 0) throw new Exception(String.format(Locale.US, "SLMP end code 0x%04X", end));
+
+        byte[] data = new byte[body.length - 2];
+        System.arraycopy(body, 2, data, 0, data.length);
+        return data;
+    }
+
+    private int[] readBitWords(Socket s, String family, int head, int words) throws Exception {
+        byte[] raw = readFrame(s, family, head, words, false);
+        int[] bits = new int[words * 16];
+        for (int w = 0; w < words; w++) {
+            int v = (raw[w*2] & 0xFF) | ((raw[w*2+1] & 0xFF) << 8);
+            for (int b = 0; b < 16; b++) bits[w*16+b] = (v >>> b) & 1;
+        }
+        return bits;
+    }
+
+    private int[] readWords(Socket s, String family, int head, int count) throws Exception {
+        byte[] raw = readFrame(s, family, head, count, false);
+        int[] vals = new int[count];
+        for (int i = 0; i < count; i++) vals[i] = (raw[i*2] & 0xFF) | ((raw[i*2+1] & 0xFF) << 8);
+        return vals;
+    }
+
+    public int readSingle(String family, int address) throws Exception {
+        try (Socket s = open()) {
+            boolean bitFamily = family.equals("SM") || family.equals("X") || family.equals("Y") ||
+                    family.equals("M") || family.equals("L") || family.equals("F") || family.equals("B");
+            byte[] raw = readFrame(s, family, address, 1, bitFamily);
+            if (bitFamily) return (raw[0] >>> 4) & 0x0F;
+            return (raw[0] & 0xFF) | ((raw[1] & 0xFF) << 8);
+        }
+    }
+
+    public Snapshot readSnapshot() throws Exception {
+        long t0 = System.nanoTime();
+        try (Socket s = open()) {
+            int[] xc = readBitWords(s, "X", hex("C00"), 16);
+            int[] xl = readBitWords(s, "X", 0, 48);
+            int[] y = readBitWords(s, "Y", hex("200"), 18);
+            int[] m = readBitWords(s, "M", 592, 19);
+            int[] f = readBitWords(s, "F", 0, 128);
+            int[] tn = readWords(s, "TN", 0, 2);
+
+            Snapshot x = new Snapshot();
+            x.controllerReady = xc[hex("C10") - hex("C00")];
+            x.servoReady = xc[hex("C11") - hex("C00")];
+            x.autoMode = xc[hex("C12") - hex("C00")];
+            x.cycle = xc[hex("C13") - hex("C00")];
+            x.feedHold = xc[hex("C14") - hex("C00")];
+            x.ncAlarm = xc[hex("C98") - hex("C00")];
+            x.servoAlarm = xc[hex("C99") - hex("C00")];
+            x.programError = xc[hex("C9A") - hex("C00")];
+            x.operationError = xc[hex("C9B") - hex("C00")];
+            x.m30 = xc[hex("C43") - hex("C00")];
+
+            x.plcAlarm = m[600 - 592];
+            x.lubePulse = m[707 - 592];
+            x.lubeCommand = m[7
