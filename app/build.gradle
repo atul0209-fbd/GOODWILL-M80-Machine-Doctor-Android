@@ -3,11 +3,11 @@ android {
     namespace 'com.goodwill.m80doctor'
     compileSdk 34
     defaultConfig {
-        applicationId 'com.goodwill.machinedoctor'
+        applicationId 'com.goodwill.machinedoctor.axisprobe'
         minSdk 23
         targetSdk 34
-        versionCode 40
-        versionName '4.0.1-approved-clean-install'
+        versionCode 50
+        versionName '5.0-axis-program-probe'
     }
     buildTypes {
         debug { debuggable true }
