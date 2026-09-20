@@ -1,0 +1,145 @@
+package com.goodwill.m80doctor;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.net.Uri;
+import android.os.Bundle;
+import android.provider.Settings;
+import android.text.InputType;
+import android.view.Gravity;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class MainActivity extends Activity {
+    private static final int NAVY = Color.rgb(18,58,104);
+    private static final int NAVY_DARK = Color.rgb(13,42,70);
+    private static final int BLUE = Color.rgb(37,118,222);
+    private static final int GREEN = Color.rgb(31,166,74);
+    private static final int RED = Color.rgb(217,48,37);
+    private static final int BG = Color.rgb(238,243,248);
+    private static final int PANEL = Color.WHITE;
+    private static final int INK = Color.rgb(16,42,77);
+    private static final int MUTED = Color.rgb(99,121,145);
+
+    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private SharedPreferences prefs;
+    private FrameLayout content;
+    private TextView topStatus, topClock;
+    private volatile boolean running = true;
+    private SlmpClient.Snapshot lastSnapshot;
+    private SlmpClient.JobData lastJob;
+    private long cycleStartMs = 0;
+    private int prevCycle = 0;
+    private int prevM30 = 0;
+    private int cycleCount = 0;
+    private double runSec = 0, idleSec = 0, alarmSec = 0;
+    private long lastTick = System.currentTimeMillis();
+    private String currentPage = "PANEL";
+
+    // live panel widgets
+    private TextView state, ready, servo, autoMode, cycle, hold, alarm;
+    private TextView coordX, coordY, coordZ, rawCurrent, rawTarget;
+    private TextView programNo, activeBlock, mode, cycles, cycleClock;
+    private TextView tool, tCode, sCode, mCode, spindle, feedOvr, rapidOvr, spindleOvr, xLoad, zLoad;
+    private TextView lubeLevel, lubePress, lubeCmd, lubeTn1;
+    private TextView todayRun, todayIdle, todayAlarm, todayCycles;
+    private TextView alarmBox;
+
+    @Override public void onCreate(Bundle b) {
+        super.onCreate(b);
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        prefs = getSharedPreferences("goodwill_m80", MODE_PRIVATE);
+        buildShell();
+        showPanel();
+        startPolling();
+    }
+
+    @Override protected void onDestroy() {
+        running = false;
+        io.shutdownNow();
+        super.onDestroy();
+    }
+
+    private void buildShell() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(BG);
+
+        LinearLayout top = row();
+        top.setPadding(dp(14), dp(8), dp(14), dp(8));
+        top.setBackgroundColor(Color.rgb(248,251,255));
+
+        LinearLayout titleBox = col();
+        TextView brand = txt("GOODWILL", 22, INK, true);
+        TextView sub = txt("MITSUBISHI M80 MACHINE DOCTOR", 15, MUTED, true);
+        titleBox.addView(brand);
+        titleBox.addView(sub);
+        top.addView(titleBox, new LinearLayout.LayoutParams(0, dp(58), 1f));
+
+        topStatus = txt("OFFLINE • READ ONLY", 13, RED, true);
+        topStatus.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+        top.addView(topStatus, new LinearLayout.LayoutParams(dp(230), dp(58)));
+
+        topClock = txt("--:--:--", 16, INK, true);
+        topClock.setGravity(Gravity.CENTER);
+        top.addView(topClock, new LinearLayout.LayoutParams(dp(110), dp(58)));
+
+        root.addView(top, new LinearLayout.LayoutParams(-1, dp(74)));
+
+        HorizontalScrollView hsv = new HorizontalScrollView(this);
+        hsv.setHorizontalScrollBarEnabled(false);
+        LinearLayout nav = row();
+        nav.setBackgroundColor(NAVY);
+        String[] names = {"PANEL","JOB","ALARMS","LUBE","RUNTIME","PLC","DIAG","HELP","SETTINGS"};
+        for (String n : names) {
+            Button b = navButton(n);
+            b.setOnClickListener(v -> switchPage(n));
+            nav.addView(b, new LinearLayout.LayoutParams(dp(120), dp(46)));
+        }
+        hsv.addView(nav);
+        root.addView(hsv, new LinearLayout.LayoutParams(-1, dp(46)));
+
+        content = new FrameLayout(this);
+        root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        setContentView(root);
+    }
+
+    private void switchPage(String p) {
+        currentPage = p;
+        switch (p) {
+            case "PANEL": showPanel(); break;
+            case "JOB": showJob(); break;
+            case "ALARMS": showAlarms(); break;
+            case "LUBE": showLube(); break;
+            case "RUNTIME": showRuntime(); break;
+            case "PLC": showPlc(); break;
+            case "DIAG": showDiag(); break;
+            case "HELP": showHelp(); break;
+            case "SETTINGS": unlockSettings(); break;
+        }
+    }
+
+    private void showPanel() {
+        content.removeAllViews();
+        LinearLayout page = col();
+        page.setPadding
