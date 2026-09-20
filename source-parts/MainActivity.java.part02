@@ -1,0 +1,115 @@
+(dp(8), dp(8), dp(8), dp(8));
+
+        LinearLayout statusStrip = row();
+        statusStrip.setPadding(dp(8), dp(5), dp(8), dp(5));
+        statusStrip.setBackgroundColor(NAVY_DARK);
+        state = statusCell(statusStrip, "WAITING", 1.5f);
+        ready = statusCell(statusStrip, "READY 0", 1f);
+        servo = statusCell(statusStrip, "SERVO 0", 1f);
+        autoMode = statusCell(statusStrip, "AUTO 0", 1f);
+        cycle = statusCell(statusStrip, "CYCLE 0", 1f);
+        hold = statusCell(statusStrip, "HOLD 0", 1f);
+        alarm = statusCell(statusStrip, "ALARM 0", 1f);
+        cycleClock = statusCell(statusStrip, "00:00", 1.2f);
+        page.addView(statusStrip, new LinearLayout.LayoutParams(-1, dp(52)));
+
+        LinearLayout main = row();
+        main.setPadding(0, dp(7), 0, dp(7));
+
+        LinearLayout pos = panel("POSITION");
+        LinearLayout tabs = row();
+        for (String t : new String[]{"MACHINE","WORK","REL","DTG"}) {
+            Button b = smallButton(t);
+            tabs.addView(b, new LinearLayout.LayoutParams(0, dp(32), 1f));
+        }
+        pos.addView(tabs);
+        coordX = coordRow(pos, "X");
+        coordY = coordRow(pos, "Y");
+        coordZ = coordRow(pos, "Z");
+        rawCurrent = metric(pos, "R8701 CURRENT WINDOW", "—");
+        rawTarget = metric(pos, "R8702 TARGET WINDOW", "—");
+        pos.addView(note("Exact XYZ decoding pending verification; raw position-window values are live."));
+        main.addView(pos, new LinearLayout.LayoutParams(0, -1, 0.85f));
+
+        LinearLayout prog = panel("RUNNING PROGRAM");
+        LinearLayout meta = row();
+        programNo = metricCell(meta, "PROGRAM", "—");
+        activeBlock = metricCell(meta, "ACTIVE BLOCK", "—");
+        mode = metricCell(meta, "MODE", "—");
+        cycles = metricCell(meta, "CYCLES", "0");
+        prog.addView(meta);
+        TextView code = txt("; LIVE PROGRAM / N-BLOCK MAPPING PENDING\n\nO----   (CURRENT PROGRAM)\nN----   G-- X---- Y---- Z----\n▶ N---- ACTIVE BLOCK WILL HIGHLIGHT HERE\nN----   S---- F----\nN----   M----", 15, Color.rgb(205,225,242), false);
+        code.setTypeface(android.graphics.Typeface.MONOSPACE);
+        code.setPadding(dp(12), dp(12), dp(12), dp(12));
+        code.setBackgroundColor(Color.rgb(10,18,27));
+        prog.addView(code, new LinearLayout.LayoutParams(-1, 0, 1f));
+        prog.addView(note("READ ONLY • true active block will be enabled only after exact M80 program/block mapping is verified."));
+        main.addView(prog, new LinearLayout.LayoutParams(0, -1, 1.55f));
+
+        LinearLayout job = panel("JOB / CUTTING DATA");
+        tool = metric(job, "TOOL IN SPINDLE • R10620", "—");
+        tCode = metric(job, "T COMMAND • R536", "—");
+        spindle = metric(job, "SPINDLE RAW • R6500", "—");
+        sCode = metric(job, "S COMMAND • R512", "—");
+        mCode = metric(job, "M CODE • R504", "—");
+        feedOvr = metric(job, "FEED OVR • R2500", "—");
+        rapidOvr = metric(job, "RAPID OVR • R2502", "—");
+        spindleOvr = metric(job, "SPINDLE OVR • R7008", "—");
+        xLoad = metric(job, "X LOAD • R4884", "—");
+        zLoad = metric(job, "Z LOAD • R4888", "—");
+        main.addView(job, new LinearLayout.LayoutParams(0, -1, 0.95f));
+
+        page.addView(main, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        LinearLayout bottom = row();
+        alarmBox = bottomCard(bottom, "CURRENT ALARM", "NO ACTIVE ALARM");
+        LinearLayout lube = bottomPanel(bottom, "LUBRICATION");
+        lubeLevel = metric(lube, "LEVEL RAW", "—");
+        lubePress = metric(lube, "PRESS RAW", "—");
+        lubeCmd = metric(lube, "COMMAND", "—");
+        lubeTn1 = metric(lube, "TN1", "—");
+        LinearLayout tod = bottomPanel(bottom, "TODAY");
+        todayRun = metric(tod, "RUNNING", "00:00");
+        todayIdle = metric(tod, "IDLE", "00:00");
+        todayAlarm = metric(tod, "ALARM", "00:00");
+        todayCycles = metric(tod, "M30 COUNT", "0");
+        LinearLayout cam = bottomPanel(bottom, "LIVE CAMERA");
+        Button openCam = smallButton("OPEN CAMERA");
+        openCam.setOnClickListener(v -> openCamera());
+        cam.addView(openCam);
+        cam.addView(note("Configure camera URL in Settings. Recommended on a separate network."));
+        page.addView(bottom, new LinearLayout.LayoutParams(-1, dp(175)));
+
+        content.addView(page);
+        applyLiveToPanel();
+    }
+
+    private void showJob() {
+        content.removeAllViews();
+        ScrollView sv = new ScrollView(this);
+        LinearLayout p = panel("JOB & LIVE RAW DATA");
+        p.addView(note("All values below are read-only. Engineering scaling is not assumed until verified."));
+        if (lastJob == null) {
+            p.addView(note("Waiting for live M80 job registers..."));
+        } else {
+            addJobRows(p, lastJob);
+        }
+        sv.addView(p);
+        content.addView(sv);
+    }
+
+    private void showAlarms() {
+        content.removeAllViews();
+        ScrollView sv = new ScrollView(this);
+        LinearLayout p = panel("ALARMS");
+        if (lastSnapshot == null || lastSnapshot.activeFAlarms.isEmpty()) {
+            p.addView(note("No active F alarms."));
+        } else {
+            for (Integer n : lastSnapshot.activeFAlarms) p.addView(note("F" + n + " active"));
+        }
+        p.addView(note("Alarm names/troubleshooting will use the machine-builder ladder map in the next APK iteration."));
+        sv.addView(p); content.addView(sv);
+    }
+
+    private void showLube() {
+        content.
