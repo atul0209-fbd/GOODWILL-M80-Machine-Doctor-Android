@@ -26,7 +26,8 @@ jobs:
           base64 -d /tmp/ui.b64 | gunzip > app/src/main/assets/index.html
           cat packed/icon.part* > /tmp/icon.b64
           base64 -d /tmp/icon.b64 > app/src/main/res/drawable/machine_doctor_icon.webp
-          cp app/src/main/res/drawable/machine_doctor_icon.webp app/src/main/assets/machine_doctor_icon.png
+          cp app/src/main/res/drawable/machine_doctor_icon.webp app/src/main/assets/machine_doctor_icon.webp
+          sed -i 's/machine_doctor_icon\.png/machine_doctor_icon.webp/g' app/src/main/assets/index.html
 
       - name: Build APK
         run: gradle :app:assembleDebug --stacktrace
